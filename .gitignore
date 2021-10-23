@@ -1,4 +1,5 @@
-# Files to ignore
+# Files/folders to ignore
+data/
 
 # MacOS and Server
 .DS_Store
