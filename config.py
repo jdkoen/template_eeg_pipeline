@@ -57,7 +57,7 @@ preprocess_options = {
 }
 
 # BVEF File and Montage
-bv_montage = read_custom_montage('brainvision_64.bvef', head_size=.08)
+bv_montage = read_custom_montage('old_64ch.bvef', head_size=.08)
 
 # Rename mapper for BV Stimulus
 rename_markers = {
@@ -115,4 +115,3 @@ report_dir.mkdir(parents=True, exist_ok=True)
 # Analysis Directory
 analysis_dir = data_dir / 'analyses' / f'task-{task}'
 analysis_dir.mkdir(parents=True, exist_ok=True)
-
