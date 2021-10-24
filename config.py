@@ -8,11 +8,11 @@ for preprocessing EEG data.
 # Import libraries
 from pathlib import Path
 import platform
-import numpy as np
 from mne.channels import read_custom_montage
 
 import os
 os.chdir(os.path.split(__file__)[0])
+my_os = platform.system()
 
 # STEP 1: TASK AND SUBJECT SPECIFIC VARIABLES
 # Project ID and Experiment number
@@ -84,7 +84,6 @@ event_id = {
 # This is platform dependent and returns a Path class object
 # Get the server directory
 # UNCOMMENT THIS FOR A REAL PROJECT
-# my_os = platform.system()
 # if my_os == 'Darwin':
 #     server_dir = Path('/Volumes/koendata/EXPT')
 # elif my_os == 'Linux':
