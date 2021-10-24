@@ -5,12 +5,8 @@ Description: This script imports data from sourcedata to bids format.
 """
 
 # Import Libraries
-import sys
 import os
-
 os.chdir(os.path.split(__file__)[0])
-sys.path.append('../../')  # For functions file
-sys.path.append('..')  # For config file
 
 import numpy as np
 import pandas as pd
@@ -40,8 +36,8 @@ event_id['boundary'] = -99
 # List of data columns to drop from behavioral data file(s)
 cols_to_keep = ['id', 'stim_list', 'experimenter', 'frameRate',
                 'psychopyVersion', 'phase', 'task', 'TrialNumber',
-                'image', 'category', 'subcategory', 'repeat', 'jitter',
-                'resp', 'rt', 'correct']
+                'image', 'category', 'subcategory', 'repeat', 'presentation',
+                'jitter', 'resp', 'rt', 'correct']
 
 # Rename mapper for behavioral data file
 cols_to_rename = {
@@ -60,26 +56,26 @@ for sub in sub_list:
     # STEP 1: SUBJECT INFORMATION DEFINITION
     # Define the Subject and Source Path
     sub_id = sub.replace('sub-', '')
-    source_path = source_dir / sub
+    source_sub_dir = source_dir / sub
 
     # Handle Bids Path and ID for EEG data
     bids_id = sub[-3:]
-    bids_path = BIDSPath(subject=bids_id, task=task,
+    bids_sub_dir = BIDSPath(subject=bids_id, task=task,
                          datatype='eeg', root=bids_dir)
 
     # Derivative Paths
-    deriv_path = deriv_dir / f'sub-{bids_id}'
-    deriv_path.mkdir(parents=True, exist_ok=True)
+    deriv_sub_dir = deriv_dir / f'sub-{bids_id}'
+    deriv_sub_dir.mkdir(parents=True, exist_ok=True)
 
     # Print Info to Screen
     print(f'Making BIDS data for sub-{bids_id} ({sub_id}) for task-{task}')
-    print(f'  Source Path: {source_path}')
-    print(f'  BIDS Path: {bids_path.directory}')
-    print(f'  Derivative Path: {deriv_path}')
+    print(f'  Source Path: {source_sub_dir}')
+    print(f'  BIDS Path: {bids_sub_dir.directory}')
+    print(f'  Derivative Path: {deriv_sub_dir}')
 
     # STEP 2: PROCESS EEG DATA
     # Define the source data file
-    source_vhdr = source_path / f'{sub_id}_1back.vhdr'
+    source_vhdr = source_sub_dir / f'{sub_id}_1back.vhdr'
 
     # Anonymize Dictionary
     anonymize = {
@@ -119,13 +115,13 @@ for sub in sub_list:
         raw.info['bads'] = sub_bad_chans['channels']
 
     # Write BIDS Output
-    write_raw_bids(raw, bids_path=bids_path, events_data=events,
+    write_raw_bids(raw, bids_path=bids_sub_dir, events_data=events,
                    event_id=event_id, overwrite=True, verbose=False)
 
     # UPDATE CHANNELS.TSV
     # Load *channels.tsv file
-    bids_path.update(suffix='channels', extension='.tsv')
-    chans_data = pd.read_csv(bids_path.fpath, sep='\t')
+    bids_sub_dir.update(suffix='channels', extension='.tsv')
+    chans_data = pd.read_csv(bids_sub_dir.fpath, sep='\t')
 
     # Add status_description
     chans_data['status_description'] = 'n/a'
@@ -142,11 +138,11 @@ for sub in sub_list:
         chans_data.loc[chans_data['name'] == chan, ['reference']] = 'n/a'
 
     # Overwrite file
-    chans_data.to_csv(bids_path.fpath, sep='\t', index=False)
+    chans_data.to_csv(bids_sub_dir.fpath, sep='\t', index=False)
 
     # STEP 3: PROCESS BEHAVIORAL DATA FILE
     # Read in the *beh.tsv behavioral file
-    beh_source_file = source_path / f'{sub_id}_beh.tsv'
+    beh_source_file = source_sub_dir / f'{sub_id}_beh.tsv'
     beh_data = pd.read_csv(beh_source_file, sep='\t')[cols_to_keep]
     beh_data.rename(columns=cols_to_rename, inplace=True)
 
@@ -161,15 +157,15 @@ for sub in sub_list:
     beh_data.replace(['None', '', '--'], 'n/a', inplace=True)
 
     # Save behavioral data
-    bids_path.update(datatype='beh')
-    bids_path.directory.mkdir(parents=True, exist_ok=True)
-    beh_save_file = bids_path.directory / f'sub-{bids_id}_task-{task}_beh.tsv'
+    bids_sub_dir.update(datatype='beh')
+    bids_sub_dir.directory.mkdir(parents=True, exist_ok=True)
+    beh_save_file = bids_sub_dir.directory / f'sub-{bids_id}_task-{task}_beh.tsv'
     beh_data.to_csv(beh_save_file, sep='\t', index=False)
 
     # STEP 4: UPDATE *_EVENTS.TSV WITH BEHAVIORAL DATA
     # Load *events.tsv
-    bids_path.update(datatype='eeg', suffix='events')
-    events_data = pd.read_csv(bids_path.fpath, sep='\t')
+    bids_sub_dir.update(datatype='eeg', suffix='events')
+    events_data = pd.read_csv(bids_sub_dir.fpath, sep='\t')
 
     # Add new columnas as "n/a" values
     events_data[cols_to_add] = 'n/a'
@@ -184,12 +180,12 @@ for sub in sub_list:
             counter += 1
 
     # Overwrite *events.tsv
-    events_data.to_csv(bids_path.fpath, sep='\t', index=False)
+    events_data.to_csv(bids_sub_dir.fpath, sep='\t', index=False)
 
     # STEP 5: UPDATE *eeg_json
     # Load JSON
-    bids_path.update(suffix='eeg', extension='json')
-    with open(bids_path.fpath, 'r') as file:
+    bids_sub_dir.update(suffix='eeg', extension='json')
+    with open(bids_sub_dir.fpath, 'r') as file:
         eeg_json = json.load(file)
 
     # Update keys
@@ -197,5 +193,5 @@ for sub in sub_list:
     eeg_json['EEGGround'] = 'Fpz'
 
     # Save EEG JSON
-    with open(bids_path.fpath, 'w') as file:
+    with open(bids_sub_dir.fpath, 'w') as file:
         json.dump(eeg_json, file)
