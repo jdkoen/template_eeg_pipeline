@@ -1,10 +1,15 @@
 """
-Script: 01_compute_behavioral_data.py
-Creator: Joshua D. Koen
+Script Name: 01_compute_behavioral_data.py
+Author: Joshua D. Koen
+
+# THIS SCRIPT IS SPECIFIC TO THIS STUDY, AND WILL NEED TO BE REDONE
+# FOR YOUR PROJECT.
+
 Description: This script analyzes the behavioral data for the
 1-back task. The script returns a trial level file and a summary
 level file.
 
+## TRIAL LEVEL FILE ##
 The trial level file name is formatted as:
 
 sub-<id>_task-{task}_desc-triallevel_beh.tsv
@@ -13,12 +18,20 @@ This file contains RT and accuracy data (and other information)
 for each trial. It is basically a copy of the original BIDS
 behavioral data file.
 
+## SUMMARY DATA FILE ##
 The summary data file name is formatted as:
 
 sub-<id>_task-{task}_desc-summary_beh.tsv
 
+This file includes 1 row of data with the following measures for
+a participant:
 
+  * response accuracy (proportion correct)
+  * mean reaction time for correct 1-back trials
+  * median reaction time for correct 1-back trials
+  * standard deviation of reaction times for correct 1-back trials
 
+The above measures are computed for faces, scenes, and objects.
 """
 
 # Import Libraries
