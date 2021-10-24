@@ -1,7 +1,5 @@
 # Files/folders to ignore
-data/bids
-data/derivatives
-data/analyses
+data/
 
 # MacOS and Server
 .DS_Store
