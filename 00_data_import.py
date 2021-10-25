@@ -90,7 +90,6 @@ for sub in sub_list:
 
     # Update line frequency to 60 Hz and indicate it is properly referenced
     raw.info['line_freq'] = 60.0
-    raw.set_eeg_reference(ref_channels=[])
 
     # Update event descriptions
     # (does it inplace on raw.annotations.description)
@@ -117,8 +116,7 @@ for sub in sub_list:
 
     # Write BIDS Output
     write_raw_bids(raw, bids_path=bids_sub_dir, events_data=events,
-                   event_id=event_id, overwrite=True, verbose=False,
-                   allow_preload=True, format='BrainVision')
+                   event_id=event_id, overwrite=True, verbose=False)
 
     # UPDATE CHANNELS.TSV
     # Load *channels.tsv file
