@@ -117,7 +117,8 @@ for sub in sub_list:
 
     # Write BIDS Output
     write_raw_bids(raw, bids_path=bids_sub_dir, events_data=events,
-                   event_id=event_id, overwrite=True, verbose=False)
+                   event_id=event_id, overwrite=True, verbose=False,
+                   allow_preload=True, format='BrainVision')
 
     # UPDATE CHANNELS.TSV
     # Load *channels.tsv file
