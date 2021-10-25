@@ -85,7 +85,7 @@ for sub in sub_list:
 
     # Read in raw bv from source and anonymize
     raw = read_raw_brainvision(source_vhdr, misc=['Photosensor'],
-                               eog=['VEOG', 'HEOG'], preload=True)
+                               eog=['VEOG', 'HEOG'])
     raw.anonymize(daysback=anonymize['daysback'])
 
     # Update line frequency to 60 Hz and indicate it is properly referenced
