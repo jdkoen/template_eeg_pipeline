@@ -10,6 +10,7 @@ os.chdir(os.path.split(__file__)[0])
 
 import numpy as np
 import pandas as pd
+import shutil
 import json
 from random import (random, randrange)
 
@@ -115,6 +116,8 @@ for sub in sub_list:
         raw.info['bads'] = sub_bad_chans['channels']
 
     # Write BIDS Output
+    if bids_sub_dir.directory.is_dir():
+        shutil.rmtree(bids_sub_dir.directory)
     write_raw_bids(raw, bids_path=bids_sub_dir, events_data=events,
                    event_id=event_id, overwrite=True, verbose=False)
 
