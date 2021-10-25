@@ -61,7 +61,7 @@ for sub in sub_list:
     # Handle Bids Path and ID for EEG data
     bids_id = sub[-3:]
     bids_sub_dir = BIDSPath(subject=bids_id, task=task,
-                         datatype='eeg', root=bids_dir)
+                            datatype='eeg', root=bids_dir)
 
     # Derivative Paths
     deriv_sub_dir = deriv_dir / f'sub-{bids_id}'
@@ -85,11 +85,12 @@ for sub in sub_list:
 
     # Read in raw bv from source and anonymize
     raw = read_raw_brainvision(source_vhdr, misc=['Photosensor'],
-                               eog=['VEOG', 'HEOG'])
+                               eog=['VEOG', 'HEOG'], preload=True)
     raw.anonymize(daysback=anonymize['daysback'])
 
-    # Update line frequency to 60 Hz
+    # Update line frequency to 60 Hz and indicate it is properly referenced
     raw.info['line_freq'] = 60.0
+    raw.set_eeg_reference(ref_channels=[])
 
     # Update event descriptions
     # (does it inplace on raw.annotations.description)
@@ -159,7 +160,8 @@ for sub in sub_list:
     # Save behavioral data
     bids_sub_dir.update(datatype='beh')
     bids_sub_dir.directory.mkdir(parents=True, exist_ok=True)
-    beh_save_file = bids_sub_dir.directory / f'sub-{bids_id}_task-{task}_beh.tsv'
+    beh_save_file = bids_sub_dir.directory / \
+        f'sub-{bids_id}_task-{task}_beh.tsv'
     beh_data.to_csv(beh_save_file, sep='\t', index=False)
 
     # STEP 4: UPDATE *_EVENTS.TSV WITH BEHAVIORAL DATA
@@ -195,3 +197,43 @@ for sub in sub_list:
     # Save EEG JSON
     with open(bids_sub_dir.fpath, 'w') as file:
         json.dump(eeg_json, file)
+
+    # STEP 6: MAKE COPY IN DERIVATIVES
+    # Write Raw instance
+    raw_out_file = deriv_sub_dir / \
+        f'sub-{bids_id}_task-{task}_ref-FCz_desc-import_raw.fif.gz'
+    raw.save(raw_out_file, overwrite=True)
+
+    # Make a JSON
+    json_info = {
+        'Description': 'Import from BrainVision Recorder',
+        'sfreq': raw.info['sfreq'],
+        'reference': 'FCz'
+    }
+    json_file = deriv_sub_dir / \
+        f'sub-{bids_id}_task-{task}_ref-FCz_desc-import_raw.json'
+    with open(json_file, 'w') as outfile:
+        json.dump(json_info, outfile, indent=4)
+
+    # Write events
+    events_out_file = deriv_sub_dir / \
+        f'sub-{bids_id}_task-{task}_desc-import_eve.txt'
+    mne.write_events(events_out_file, events)
+
+    # Make a JSON
+    json_info = {
+        'Description': 'Events from Brain Vision Import',
+        'columns': ['onset', 'duration', 'code'],
+        'onset_units': 'samples',
+        'sfreq': raw.info['sfreq'],
+        'codes': event_id
+    }
+    json_file = deriv_sub_dir / \
+        f'sub-{bids_id}_task-{task}_desc-import_eve.json'
+    with open(json_file, 'w') as outfile:
+        json.dump(json_info, outfile, indent=4)
+
+    # Write a copy of the behavioral data file to derivatives
+    beh_save_file = deriv_sub_dir / \
+        f'sub-{bids_id}_task-{task}_beh.tsv'
+    beh_data.to_csv(beh_save_file, sep='\t', index=False)
