@@ -21,7 +21,7 @@ import mne
 from mne_bids import BIDSPath, write_raw_bids
 
 from config import (bids_dir, source_dir, deriv_dir, task,
-                    rename_markers, event_id, bad_chans, preprocess_options)
+                    rename_markers, event_id, bad_chans, preprocess_opts)
 
 from functions import get_sub_list
 
@@ -102,9 +102,10 @@ for sub in sub_list:
         print('  ', old_name, 'to', new_name)
         description[description == old_name] = new_name
     annots_2_keep = np.isin(description, list(event_id.keys()))
-    raw._annotations = mne.Annotations(
+    annotations = mne.Annotations(
         onset[annots_2_keep], duration[annots_2_keep],
         description[annots_2_keep])
+    raw._annotations = annotations
 
     # Extract Events and remove annotations
     events, event_id = events_from_annotations(raw, event_id=event_id)
@@ -134,7 +135,7 @@ for sub in sub_list:
                            ['status_description']] = reason
 
     # Add EEG Reference
-    chans_data['reference'] = preprocess_options['reference_chan']
+    chans_data['reference'] = preprocess_opts['reference_chan']
 
     # Remove online reference from auxillary channels
     for chan in ['VEOG', 'HEOG', 'Photosensor']:
@@ -199,43 +200,3 @@ for sub in sub_list:
     # Save EEG JSON
     with open(bids_sub_dir.fpath, 'w') as file:
         json.dump(eeg_json, file)
-
-    # STEP 6: MAKE COPY IN DERIVATIVES
-    # Write Raw instance
-    raw_out_file = deriv_sub_dir / \
-        f'sub-{bids_id}_task-{task}_ref-FCz_desc-import_raw.fif.gz'
-    raw.save(raw_out_file, overwrite=True)
-
-    # Make a JSON
-    json_info = {
-        'Description': 'Import from BrainVision Recorder',
-        'sfreq': raw.info['sfreq'],
-        'reference': 'FCz'
-    }
-    json_file = deriv_sub_dir / \
-        f'sub-{bids_id}_task-{task}_ref-FCz_desc-import_raw.json'
-    with open(json_file, 'w') as outfile:
-        json.dump(json_info, outfile, indent=4)
-
-    # Write events
-    events_out_file = deriv_sub_dir / \
-        f'sub-{bids_id}_task-{task}_desc-import_eve.txt'
-    mne.write_events(events_out_file, events)
-
-    # Make a JSON
-    json_info = {
-        'Description': 'Events from Brain Vision Import',
-        'columns': ['onset', 'duration', 'code'],
-        'onset_units': 'samples',
-        'sfreq': raw.info['sfreq'],
-        'codes': event_id
-    }
-    json_file = deriv_sub_dir / \
-        f'sub-{bids_id}_task-{task}_desc-import_eve.json'
-    with open(json_file, 'w') as outfile:
-        json.dump(json_info, outfile, indent=4)
-
-    # Write a copy of the behavioral data file to derivatives
-    beh_save_file = deriv_sub_dir / \
-        f'sub-{bids_id}_task-{task}_beh.tsv'
-    beh_data.to_csv(beh_save_file, sep='\t', index=False)

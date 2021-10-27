@@ -55,9 +55,7 @@ for sub in sub_list:
 
     # Get subject information
     sub_id = sub.replace('sub-', '')
-    bids_sub_dir = bids_dir / sub
     deriv_sub_dir = deriv_dir / sub
-    deriv_sub_dir.mkdir(parents=True, exist_ok=True)
     fig_sub_dir = deriv_sub_dir / 'figures'
     fig_sub_dir.mkdir(parents=True, exist_ok=True)
 
@@ -68,7 +66,7 @@ for sub in sub_list:
     fig.suptitle(sub, fontsize=18)
 
     # Load the behavioral data file
-    beh_file = bids_sub_dir / 'beh' / f'{sub}_task-{task}_beh.tsv'
+    beh_file = deriv_sub_dir / 'beh' / f'{sub}_task-{task}_beh.tsv'
     beh_data = pd.read_csv(beh_file, sep='\t')
 
     # Variables use for grouping summary measures.

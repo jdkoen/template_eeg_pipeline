@@ -32,26 +32,22 @@ bad_subs = []
 # a list with the channel name that is bad, and the reson why.
 bad_chans = {
     '999': {
-        'channels': ['TP10'],
-        'reason': ['excessive line noise']
+        'channels': ['Cz'],
+        'reason': ['a test for bad channels']
         }
 }
 
 # STEP 2: Define Preprocessing Options
 # Dictionary of preprocessing options
-preprocess_options = {
+preprocess_opts = {
     'reference_chan': 'FCz',
     'blink_thresh': 150e-6,
     'ext_val_thresh': 100e-6,
-    'perc_good_chans': .10,
     'resample': 250,
     'highpass': .1,
     'tmin': -1.0,
     'tmax': 1.0,
     'baseline': (-.2, 0),
-    'evoked_tmin': -.2,
-    'evoked_tmax': .6,
-    'evoked_lowpass': 20.0,
     'ica_highpass': 1,
     'ica_baseline': (None, None)
 }
