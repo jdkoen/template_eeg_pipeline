@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import shutil
 import json
-from random import (random, randrange)
+from random import (random, randrange, seed)
 
 from mne.io import read_raw_brainvision
 from mne import events_from_annotations
@@ -21,35 +21,13 @@ import mne
 from mne_bids import BIDSPath, write_raw_bids
 
 from config import (bids_dir, source_dir, deriv_dir, task,
-                    rename_markers, event_id, bad_chans, preprocess_opts)
-
+                    cols_to_keep, cols_to_add, cols_to_rename,
+                    rename_markers, markers_to_del, bad_chans, preprocess_opts)
 from functions import get_sub_list
 
 # Get subject list to process
 sub_list = get_sub_list(source_dir, allow_all=True)
-
-# Add boundary to event_dict
-event_id['boundary'] = -99
-
-# BELOW CAN BE MODIFIED
-
-# DATA COLUMNS TO KEEP AND ADD
-# List of data columns to drop from behavioral data file(s)
-cols_to_keep = ['id', 'stim_list', 'experimenter', 'frameRate',
-                'psychopyVersion', 'phase', 'task', 'TrialNumber',
-                'image', 'category', 'subcategory', 'repeat', 'presentation',
-                'jitter', 'resp', 'rt', 'correct']
-
-# Rename mapper for behavioral data file
-cols_to_rename = {
-    'frameRate': 'frame_rate',
-    'psychopyVersion': 'psychopy_version',
-    'TrialNumber': 'trial_number'
-}
-
-# List of columns to add to *events.tsv from behavioral data
-cols_to_add = ['trial_number', 'category', 'subcategory', 'repeat', 'resp',
-               'rt', 'correct']
+study_seed = int(input('Enter digits for study/project id: '))
 
 # Get Subject List
 for sub in sub_list:
@@ -79,48 +57,43 @@ for sub in sub_list:
     source_vhdr = source_sub_dir / f'{sub_id}_1back.vhdr'
 
     # Anonymize Dictionary
+    seed(a=study_seed)
     anonymize = {
         'daysback': (365 * randrange(100, 110)) +
-                    (randrange(-120, 120) + random())
+                    (randrange(-120, 120))
     }
 
     # Read in raw bv from source and anonymize
-    raw = read_raw_brainvision(source_vhdr, misc=['Photosensor'],
-                               eog=['VEOG', 'HEOG'])
-    raw.anonymize(daysback=anonymize['daysback'])
-
+    raw = read_raw_brainvision(
+        source_vhdr, misc=[preprocess_opts['photosensor_chan']],
+        eog=['VEOG', 'HEOG'])
+    
     # Update line frequency to 60 Hz and indicate it is properly referenced
     raw.info['line_freq'] = 60.0
 
-    # Update event descriptions
-    # (does it inplace on raw.annotations.description)
+    # Remove markers not wanted from annotations
     print('Renaming and extracting needed markers:')
-    onset = raw.annotations.onset.copy()
-    duration = raw.annotations.duration.copy()
-    description = raw.annotations.description.copy()
-    for old_name, new_name in rename_markers.items():
-        print('  ', old_name, 'to', new_name)
-        description[description == old_name] = new_name
-    annots_2_keep = np.isin(description, list(event_id.keys()))
-    annotations = mne.Annotations(
-        onset[annots_2_keep], duration[annots_2_keep],
-        description[annots_2_keep])
-    raw._annotations = annotations
+    marker_idx_keep = np.logical_not(np.isin(
+        raw._annotations.description, markers_to_del))
+    raw._annotations.onset = raw._annotations.onset[marker_idx_keep]
+    raw._annotations.duration = raw._annotations.duration[marker_idx_keep]
+    raw._annotations.description = \
+        raw._annotations.description[marker_idx_keep]
 
     # Extract Events and remove annotations
-    events, event_id = events_from_annotations(raw, event_id=event_id)
-    raw._annotations = mne.Annotations([], [], [])
+    events, event_id = events_from_annotations(raw)
 
     # Get bad channels and update
     sub_bad_chans = bad_chans.get(bids_id)
     if sub_bad_chans is not None:
+        print(f'{bids_id} has bad channels.')
         raw.info['bads'] = sub_bad_chans['channels']
 
     # Write BIDS Output
     if bids_sub_dir.directory.is_dir():
         shutil.rmtree(bids_sub_dir.directory)
-    write_raw_bids(raw, bids_path=bids_sub_dir, events_data=events,
-                   event_id=event_id, overwrite=True, verbose=False)
+    write_raw_bids(raw, bids_path=bids_sub_dir, anonymize=anonymize,
+                   overwrite=True, verbose=False)
 
     # UPDATE CHANNELS.TSV
     # Load *channels.tsv file
@@ -146,7 +119,7 @@ for sub in sub_list:
 
     # STEP 3: PROCESS BEHAVIORAL DATA FILE
     # Read in the *beh.tsv behavioral file
-    beh_source_file = source_sub_dir / f'{sub_id}_beh.tsv'
+    beh_source_file = source_sub_dir / f'{sub_id}_1back_beh.tsv'
     beh_data = pd.read_csv(beh_source_file, sep='\t')[cols_to_keep]
     beh_data.rename(columns=cols_to_rename, inplace=True)
 
@@ -178,7 +151,12 @@ for sub in sub_list:
     # Update with values
     counter = 0  # Keep track of current row in beh_data
     for index, row in events_data.iterrows():
-        if row['trial_type'] != 'boundary':
+        if row['trial_type'] == 'New Segment/':
+            trial_type = 'boundary'
+        else:
+            trial_type = rename_markers[row['trial_type']]
+        events_data.at[index, 'trial_type'] = trial_type
+        if trial_type != 'boundary':
             this_trial = beh_data.iloc[counter]
             for col in cols_to_add:
                 events_data.at[index, col] = this_trial[col]
@@ -196,6 +174,9 @@ for sub in sub_list:
     # Update keys
     eeg_json['EEGReference'] = 'FCz'
     eeg_json['EEGGround'] = 'Fpz'
+    eeg_json['EEGPlacementScheme'] = \
+        [x for x in raw.ch_names if x not in
+            ['VEOG', 'HEOG', 'Photosensor']]
 
     # Save EEG JSON
     with open(bids_sub_dir.fpath, 'w') as file:
