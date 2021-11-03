@@ -37,43 +37,62 @@ bad_chans = {
         }
 }
 
+# List of data columns to drop from behavioral data file(s)
+cols_to_keep = ['id', 'stim_set', 'frameRate', 'psychopyVersion',
+                'TrialNumber', 'image', 'category', 'subcategory', 'repeat',
+                'jitter', 'resp', 'rt', 'correct']
+
+# Rename mapper for behavioral data file
+cols_to_rename = {
+    'frameRate': 'frame_rate',
+    'psychopyVersion': 'psychopy_version',
+    'TrialNumber': 'trial_number'
+}
+
+# List of columns to add to *events.tsv from behavioral data
+cols_to_add = ['trial_number', 'category', 'subcategory', 'repeat', 'resp',
+               'rt', 'correct']
+
 # STEP 2: Define Preprocessing Options
 # Dictionary of preprocessing options
 preprocess_opts = {
     'reference_chan': 'FCz',
-    'blink_thresh': 150e-6,
-    'ext_val_thresh': 100e-6,
+    'photosensor_chan': 'Photosensor',
     'resample': 250,
-    'highpass': .1,
+    'l_freq': .1,
+    'h_freq': None,
     'tmin': -1.0,
     'tmax': 1.0,
     'baseline': (-.2, 0),
-    'ica_highpass': 1,
-    'ica_baseline': (None, None)
+    'bad_chan_thresh': 3,
+    'ext_voltage': 150e-6,
+    'blink_thresh': 150e-6
 }
 
 # BVEF File and Montage
 bv_montage = read_custom_montage('old_64ch.bvef', head_size=.08)
 
-# Rename mapper for BV Stimulus
-rename_markers = {
-    'New Segment/': 'boundary',
-    'Stimulus/S 11': 'scene/novel',
-    'Stimulus/S 12': 'scene/1back',
-    'Stimulus/S 21': 'object/novel',
-    'Stimulus/S 22': 'object/1back',
-    'Stimulus/S 31': 'face/novel',
-    'Stimulus/S 32': 'face/1back'
+# Markers to delete from BV .vmrk file upon save
+markers_to_del = ['Marker/M 51', 'Marker/M 52']
+
+# Event ID Marker for BV
+bv_event_ids = {
+    'Marker/M 11': 11,
+    'Marker/M 12': 12,
+    'Marker/M 21': 21,
+    'Marker/M 22': 22,
+    'Marker/M 31': 31,
+    'Marker/M 32': 32
 }
 
-# Define event dictionary
-event_id = {
-    'scene/novel': 11,
-    'scene/1back': 12,
-    'object/novel': 21,
-    'object/1back': 22,
-    'face/novel': 31,
-    'face/1back': 32,
+# Rename mapper for BV Stimulus
+rename_markers = {
+    'Marker/M 11': 'scene/novel',
+    'Marker/M 12': 'scene/1back',
+    'Marker/M 21': 'object/novel',
+    'Marker/M 22': 'object/1back',
+    'Marker/M 31': 'face/novel',
+    'Marker/M 32': 'face/1back'
 }
 
 # STEP 3: DEFINE THE SERVER AND DATA DIRECTORIES

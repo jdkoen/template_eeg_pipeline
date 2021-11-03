@@ -1,0 +1,49 @@
+name: mne
+channels:
+- conda-forge
+dependencies:
+- python>=3.8
+- pip
+- numpy
+- scipy
+- matplotlib
+- numba
+- pandas
+- xlrd
+- scikit-learn
+- h5py
+- pillow
+- statsmodels
+- jupyter
+- joblib
+- psutil
+- numexpr
+- imageio
+- tqdm
+- spyder-kernels>=1.10.0
+- imageio-ffmpeg>=0.4.1
+- vtk>=9.0.1
+- pyvista>=0.30
+- pyvistaqt>=0.4
+- qdarkstyle
+- darkdetect
+- mayavi
+- traits<6.3.0
+- PySurfer
+- dipy
+- nibabel
+- nilearn
+- python-picard
+- pyqt!=5.15.3
+- mne==0.23.4
+- mffpy>=0.5.7
+- ipywidgets
+- pooch
+- pip:
+  - ipyvtklink
+  - bycycle==1.0.0
+  - neurodsp==2.1.0
+  - mne-bids==0.8
+  - fooof==1.0.0
+  - git+https://github.com/wmvanvliet/mne-faster.git
+  - autoreject==0.2.2
