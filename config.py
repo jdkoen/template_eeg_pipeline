@@ -61,38 +61,40 @@ preprocess_opts = {
     'resample': 250,
     'l_freq': .1,
     'h_freq': None,
+    'ica_l_freq': 1.0,
+    'ica_h_freq': None,
     'tmin': -1.0,
     'tmax': 1.0,
     'baseline': (-.2, 0),
     'bad_chan_thresh': 3,
     'ext_voltage': 150e-6,
+    'ica_ext_voltage': 250e-6,
+    'faster_thresh': 3,
+    'ica_faster_thresh': 5,
+    'faster_chan_thresh': 4,
     'blink_thresh': 150e-6
 }
 
 # BVEF File and Montage
 bv_montage = read_custom_montage('old_64ch.bvef', head_size=.08)
 
-# Event ID Marker for BV
-bv_event_id = {
-    'Marker/M 11': 11,
-    'Marker/M 12': 12,
-    'Marker/M 21': 21,
-    'Marker/M 22': 22,
-    'Marker/M 31': 31,
-    'Marker/M 32': 32
-}
-
-# Rename mapper for BV Stimulus
-rename_markers = {
+# Rename mapper for BV markers
+rename_events = {
+    'New Segment/': 'boundary',
     'Marker/M 11': 'scene/novel',
     'Marker/M 12': 'scene/1back',
     'Marker/M 21': 'object/novel',
     'Marker/M 22': 'object/1back',
     'Marker/M 31': 'face/novel',
-    'Marker/M 32': 'face/1back'
+    'Marker/M 32': 'face/1back',
+    'Marker/M 51': 'resp/correct',
+    'Marker/M 52': 'resp/incorrect'
 }
 
-# Rename mapper for BV Stimulus
+# Makers to not add behavioual data too
+unchanged_markers = ['boundary', 'resp/correct', 'resp/incorrect']
+
+# Event IDs you want to epoch on
 event_id = {
     'scene/novel': 11,
     'scene/1back': 12,

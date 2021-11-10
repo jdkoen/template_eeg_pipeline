@@ -22,7 +22,8 @@ from mne_bids import (BIDSPath, write_raw_bids, mark_bad_channels)
 
 from config import (bids_dir, source_dir, deriv_dir, task,
                     cols_to_keep, cols_to_add, cols_to_rename,
-                    bv_event_id, event_id, bad_chans, preprocess_opts)
+                    rename_events, unchanged_markers, bad_chans,
+                    preprocess_opts)
 from functions import get_sub_list
 
 # Get subject list to process
@@ -72,17 +73,14 @@ for sub in sub_list:
     raw.info['line_freq'] = 60.0
 
     # Extract Events and remove annotations
-    events, _ = events_from_annotations(raw, event_id=bv_event_id)
+    events, event_id = events_from_annotations(raw)
 
     # Write BIDS Output
     if bids_sub_dir.directory.is_dir():
         shutil.rmtree(bids_sub_dir.directory)
     write_raw_bids(
-        raw.set_annotations(
-            mne.Annotations(onset=[], duration=[], description=[])),
-        bids_path=bids_sub_dir, anonymize=anonymize,
-        events_data=events, event_id=event_id, overwrite=True,
-        verbose=False)
+        raw, bids_path=bids_sub_dir, anonymize=anonymize,
+        overwrite=True, verbose=False)
 
     # UPDATE CHANNELS.TSV
     # Get bad channels and update
@@ -141,7 +139,9 @@ for sub in sub_list:
     # Update with values
     counter = 0  # Keep track of current row in beh_data
     for index, row in events_data.iterrows():
-        if row['trial_type'] != 'boundary':
+        trial_type = rename_events[row['trial_type']]
+        events_data.at[index, 'trial_type'] = trial_type
+        if trial_type not in unchanged_markers:
             this_trial = beh_data.iloc[counter]
             for col in cols_to_add:
                 events_data.at[index, col] = this_trial[col]
