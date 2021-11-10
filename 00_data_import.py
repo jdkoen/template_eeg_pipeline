@@ -12,17 +12,17 @@ import numpy as np
 import pandas as pd
 import shutil
 import json
-from random import (random, randrange, seed)
+from random import (randrange, seed)
 
 from mne.io import read_raw_brainvision
 from mne import events_from_annotations
 import mne
 
-from mne_bids import BIDSPath, write_raw_bids
+from mne_bids import (BIDSPath, write_raw_bids, mark_bad_channels)
 
 from config import (bids_dir, source_dir, deriv_dir, task,
                     cols_to_keep, cols_to_add, cols_to_rename,
-                    rename_markers, markers_to_del, bad_chans, preprocess_opts)
+                    bv_event_id, event_id, bad_chans, preprocess_opts)
 from functions import get_sub_list
 
 # Get subject list to process
@@ -52,7 +52,7 @@ for sub in sub_list:
     print(f'  BIDS Path: {bids_sub_dir.directory}')
     print(f'  Derivative Path: {deriv_sub_dir}')
 
-    # STEP 2: PROCESS EEG DATA
+    # STEP 2: BIDS-FY EEG DATA
     # Define the source data file
     source_vhdr = source_sub_dir / f'{sub_id}_1back.vhdr'
 
@@ -67,45 +67,35 @@ for sub in sub_list:
     raw = read_raw_brainvision(
         source_vhdr, misc=[preprocess_opts['photosensor_chan']],
         eog=['VEOG', 'HEOG'])
-    
+
     # Update line frequency to 60 Hz and indicate it is properly referenced
     raw.info['line_freq'] = 60.0
 
-    # Remove markers not wanted from annotations
-    print('Renaming and extracting needed markers:')
-    marker_idx_keep = np.logical_not(np.isin(
-        raw._annotations.description, markers_to_del))
-    raw._annotations.onset = raw._annotations.onset[marker_idx_keep]
-    raw._annotations.duration = raw._annotations.duration[marker_idx_keep]
-    raw._annotations.description = \
-        raw._annotations.description[marker_idx_keep]
-
     # Extract Events and remove annotations
-    events, event_id = events_from_annotations(raw)
-
-    # Get bad channels and update
-    sub_bad_chans = bad_chans.get(bids_id)
-    if sub_bad_chans is not None:
-        print(f'{bids_id} has bad channels.')
-        raw.info['bads'] = sub_bad_chans['channels']
+    events, _ = events_from_annotations(raw, event_id=bv_event_id)
 
     # Write BIDS Output
     if bids_sub_dir.directory.is_dir():
         shutil.rmtree(bids_sub_dir.directory)
-    write_raw_bids(raw, bids_path=bids_sub_dir, anonymize=anonymize,
-                   overwrite=True, verbose=False)
+    write_raw_bids(
+        raw.set_annotations(
+            mne.Annotations(onset=[], duration=[], description=[])),
+        bids_path=bids_sub_dir, anonymize=anonymize,
+        events_data=events, event_id=event_id, overwrite=True,
+        verbose=False)
 
     # UPDATE CHANNELS.TSV
+    # Get bad channels and update
+    sub_bad_chans = bad_chans.get(bids_id)
+    if sub_bad_chans is not None:
+        print(f'{bids_id} has bad channels.')
+        mark_bad_channels(
+            sub_bad_chans['channels'], sub_bad_chans['reason'],
+            bids_path=bids_sub_dir)
+
     # Load *channels.tsv file
     bids_sub_dir.update(suffix='channels', extension='.tsv')
     chans_data = pd.read_csv(bids_sub_dir.fpath, sep='\t')
-
-    # Add status_description
-    chans_data['status_description'] = 'n/a'
-    if sub_bad_chans is not None:
-        for chan, reason in sub_bad_chans.items():
-            chans_data.loc[chans_data['name'] == chan,
-                           ['status_description']] = reason
 
     # Add EEG Reference
     chans_data['reference'] = preprocess_opts['reference_chan']
@@ -151,12 +141,7 @@ for sub in sub_list:
     # Update with values
     counter = 0  # Keep track of current row in beh_data
     for index, row in events_data.iterrows():
-        if row['trial_type'] == 'New Segment/':
-            trial_type = 'boundary'
-        else:
-            trial_type = rename_markers[row['trial_type']]
-        events_data.at[index, 'trial_type'] = trial_type
-        if trial_type != 'boundary':
+        if row['trial_type'] != 'boundary':
             this_trial = beh_data.iloc[counter]
             for col in cols_to_add:
                 events_data.at[index, col] = this_trial[col]

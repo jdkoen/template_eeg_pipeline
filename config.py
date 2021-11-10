@@ -72,11 +72,8 @@ preprocess_opts = {
 # BVEF File and Montage
 bv_montage = read_custom_montage('old_64ch.bvef', head_size=.08)
 
-# Markers to delete from BV .vmrk file upon save
-markers_to_del = ['Marker/M 51', 'Marker/M 52']
-
 # Event ID Marker for BV
-bv_event_ids = {
+bv_event_id = {
     'Marker/M 11': 11,
     'Marker/M 12': 12,
     'Marker/M 21': 21,
@@ -93,6 +90,16 @@ rename_markers = {
     'Marker/M 22': 'object/1back',
     'Marker/M 31': 'face/novel',
     'Marker/M 32': 'face/1back'
+}
+
+# Rename mapper for BV Stimulus
+event_id = {
+    'scene/novel': 11,
+    'scene/1back': 12,
+    'object/novel': 21,
+    'object/1back': 22,
+    'face/novel': 31,
+    'face/1back': 32
 }
 
 # STEP 3: DEFINE THE SERVER AND DATA DIRECTORIES
