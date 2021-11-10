@@ -61,22 +61,17 @@ preprocess_opts = {
     'resample': 250,
     'l_freq': .1,
     'h_freq': None,
-    'ica_l_freq': 1.0,
-    'ica_h_freq': None,
     'tmin': -1.0,
     'tmax': 1.0,
     'baseline': (-.2, 0),
     'bad_chan_thresh': 3,
     'ext_voltage': 150e-6,
-    'ica_ext_voltage': 250e-6,
-    'faster_thresh': 3,
-    'ica_faster_thresh': 5,
-    'faster_chan_thresh': 4,
+    'faster_thresh': 4,
     'blink_thresh': 150e-6
 }
 
 # BVEF File and Montage
-bv_montage = read_custom_montage('old_64ch.bvef', head_size=.08)
+bv_montage = read_custom_montage('brainvision_64.bvef', head_size=.09)
 
 # Rename mapper for BV markers
 rename_events = {
@@ -94,7 +89,8 @@ rename_events = {
 # Makers to not add behavioual data too
 unchanged_markers = ['boundary', 'resp/correct', 'resp/incorrect']
 
-# Event IDs you want to epoch on
+# Event IDs you want to epoch on. Used to extract specific events
+# from annotations
 event_id = {
     'scene/novel': 11,
     'scene/1back': 12,
