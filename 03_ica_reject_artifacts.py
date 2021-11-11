@@ -58,7 +58,7 @@ for sub in sub_list:
     with open(json_file, 'r') as f:
         json_info = json.load(f)
 
-    # STEP 3: AUTO DETECT BAD ICS
+    # STEP 3: DETECT BAD ICS
     # Run find_bad_components
     bad_ics = find_bad_components(
         ica, epochs, thres=preprocess_opts['faster_thresh'],
