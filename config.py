@@ -64,9 +64,8 @@ preprocess_opts = {
     'tmin': -1.0,
     'tmax': 1.0,
     'baseline': (-.2, 0),
-    'bad_chan_thresh': 3,
-    'ext_voltage': 150e-6,
-    'faster_thresh': 4,
+    'faster_bad_n_chans': 4,
+    'faster_thresh': 3,
     'blink_thresh': 150e-6
 }
 
