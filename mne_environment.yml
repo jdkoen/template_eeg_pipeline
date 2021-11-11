@@ -35,15 +35,17 @@ dependencies:
 - nilearn
 - python-picard
 - pyqt!=5.15.3
-- mne==0.23.4
+- mne==0.24.0
 - mffpy>=0.5.7
 - ipywidgets
 - pooch
 - pip:
   - ipyvtklink
-  - bycycle==1.0.0
-  - neurodsp==2.1.0
+  - bycycle
+  - neurodsp
   - mne-bids==0.8
-  - fooof==1.0.0
+  - fooof
+  - autoreject
+  - mne-rsa
   - git+https://github.com/wmvanvliet/mne-faster.git
-  - autoreject==0.2.2
+  
