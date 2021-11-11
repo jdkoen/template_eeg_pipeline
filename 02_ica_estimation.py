@@ -32,14 +32,13 @@ from mne import events_from_annotations
 from mne.preprocessing import ICA
 import mne
 
-from mne_faster import (find_bad_epochs)
-from mne_bids import (BIDSPath, read_raw_bids)
+from mne_faster import find_bad_epochs
 
 from autoreject import Ransac
 
 from config import (bids_dir, deriv_dir, task, bv_montage,
                     event_id, preprocess_opts)
-from functions import (get_sub_list, adjust_events_photosensor, inspect_epochs)
+from functions import (get_sub_list, adjust_events_photosensor)
 
 # Ask for subject IDs to analyze
 sub_list = get_sub_list(deriv_dir, allow_all=False)
@@ -145,21 +144,22 @@ for sub in sub_list:
     for x in ransac.bad_chs_:
         epochs.info['bads'].append(x)
 
-    # Plot PSD TODO ADD BLOCKING FUNCTION
+    # Plot PSD TODO ADD BLOCKING FUNCTION (MATPLOTLIB)
     epochs.plot_psd(xscale='linear', show=True, n_jobs=4)
 
     # Any other channels to exclude?
     other_bads = input(
-        'Other channels to exclude? '
-        'Separate multiple channels with commas. '
-        'Leave blank if none. '
+        'Other channels to exclude?\n'
+        'Separate multiple channels with commas.\n'
+        'Leave blank if none.\n'
         'ENTER CHANNEL NAMES: ')
-    for x in other_bads.split(','):
-        if x in epochs.info['ch_names']:
-            epochs.info['bads'].append(x)
-        else:
-            print(f'WARNING: Channel {x} is not present. '
-                  'Maybe you made a typo?!?!?')
+    if other_bads:
+        for x in other_bads.split(','):
+            if x in epochs.info['ch_names']:
+                epochs.info['bads'].append(x)
+            else:
+                print(f'WARNING: Channel {x} is not present. '
+                      'Maybe you made a typo?!?!?')
 
     # Save epochs
     eeg_file = deriv_sub_dir / \
@@ -168,7 +168,7 @@ for sub in sub_list:
 
     # Make a JSON
     json_info = {
-        'Description': 'Epochs extracted from raw data for ICA',
+        'Description': 'Epochs with bad channels flagged',
         'reference': 'FCz',
         'tmin': epochs.tmin,
         'tmax': epochs.tmax,
@@ -187,6 +187,9 @@ for sub in sub_list:
     # Re-reference to average and recover FCz
     epochs.add_reference_channels(preprocess_opts['reference_chan'])
     epochs.set_eeg_reference(ref_channels='average', ch_type='eeg')
+
+    # Add the montage again for bad channel in epoch interpolation
+    epochs.set_montage(bv_montage)
 
     # Save epochs
     eeg_file = deriv_sub_dir / \
@@ -207,35 +210,26 @@ for sub in sub_list:
         json.dump(json_info, outfile, indent=4)
 
     # STEP 8: REJECT BAD EPOCHS FOR ICA
-    # Find bad epochs using FASTER
+    # Find bad epochs using FASTER and drop them
     bad_epochs = find_bad_epochs(epochs, return_by_metric=True,
                                  thres=preprocess_opts['faster_thresh'])
+    for reason, drop_epochs in bad_epochs.items():
+        epochs.drop(drop_epochs, reason=reason)
 
-    # Find VEOG at stim onset
+    # Find VEOG at stim onset and drop them
     veog_data = epochs.copy().crop(
         tmin=-.075, tmax=.075).get_data(picks=['VEOG'])
     veog_p2p = np.ptp(
         np.squeeze(veog_data), axis=1) > preprocess_opts['blink_thresh']
     bad_epochs['blink_onset'] = list(np.where(veog_p2p)[0])
-    for key, value in bad_epochs.items():
-        bad_epochs[key] = [int(x) for x in value]
-
-    # Gather all unique bad epochs
-    bad_epoch_ids = []
-    for key, value in bad_epochs.items():
-        for v in value:
-            if v not in bad_epoch_ids:
-                bad_epoch_ids.append(v)
-    bad_epoch_ids = sorted(bad_epoch_ids)
-
-    # Drop the epochs marked as bad
-    epochs.drop(bad_epoch_ids)
+    epochs.drop(bad_epochs['blink_onset'], reason='Onset Blink')
 
     # Inspect the remaining epochs
     epochs.plot(
-        n_channels=len(epochs.ch_names), n_epochs=10, events=events,
-        event_id=event_id, scalings=dict(eeg=30e-6, eog=200e-6),
-        block=False)
+        n_channels=len(epochs.ch_names), n_epochs=10,
+        events=epochs.events, event_id=epochs.event_id,
+        picks=epochs.ch_names, scalings=dict(eeg=40e-6, eog=150e-6),
+        block=True)
 
     # Find epochs and channels that were confirmed dropped
     dropped_epochs = []
@@ -289,7 +283,3 @@ for sub in sub_list:
     }
     with open(str(ica_file).replace('.fif.gz', '.json'), 'w') as outfile:
         json.dump(json_info, outfile, indent=4)
-
-
-
-        
