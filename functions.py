@@ -78,6 +78,9 @@ def adjust_events_photosensor(raw, events, photosensor='Photosensor',
 def inspect_epochs(inst, bad_epochs=None, events=None, event_id=None,
                    n_epochs=10, block=True, scalings=None, return_copy=True):
 
+    # TODO Add Docstring
+    # TODO check color issues
+
     # If return copy is true, make a copy
     if return_copy:
         epochs = inst.copy()
