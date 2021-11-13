@@ -9,6 +9,7 @@ for preprocessing EEG data.
 from pathlib import Path
 import platform
 from mne.channels import read_custom_montage
+from autoreject import Ransac
 
 import os
 os.chdir(os.path.split(__file__)[0])
@@ -56,25 +57,37 @@ cols_to_add = ['trial_number', 'category', 'subcategory', 'repeat', 'resp',
 # STEP 2: Define Preprocessing Options
 # Dictionary of preprocessing options
 preprocess_opts = {
-    'reference_chan': 'FCz',
+    'adjust_events': False,
     'photosensor_chan': 'Photosensor',
+    'drop_photosensor': False,
     'resample': 250,
+    'notch_filter': 60,
+    'ica_l_freq': 1.0,
+    'ica_h_freq': None,
     'l_freq': .1,
     'h_freq': None,
     'tmin': -1.0,
     'tmax': 1.0,
     'baseline': (-.2, 0),
+    'bad_chan_method': 'ransac',
     'faster_bad_n_chans': 4,
     'faster_thresh': 3,
-    'blink_thresh': 150e-6
+    'blink_thresh': 150e-6,
+    'erp_tmin': -.2,
+    'erp_tmax': .5
 }
+
+# RANSAC OPTION
+ransac = Ransac(min_corr=.70, min_channels=.25,
+                unbroken_time=.5, n_resample=50,
+                n_jobs=4)
 
 # BVEF File and Montage
 bv_montage = read_custom_montage('brainvision_64.bvef', head_size=.09)
 
 # Rename mapper for BV markers
 rename_events = {
-    'New Segment/': 'boundary',
+    'New Segment/': 'new_segment',
     'Marker/M 11': 'scene/novel',
     'Marker/M 12': 'scene/1back',
     'Marker/M 21': 'object/novel',
@@ -85,8 +98,8 @@ rename_events = {
     'Marker/M 52': 'resp/incorrect'
 }
 
-# Makers to not add behavioual data too
-unchanged_markers = ['boundary', 'resp/correct', 'resp/incorrect']
+# Makers to not add behavioral data too
+unchanged_markers = ['new_segment', 'resp/correct', 'resp/incorrect']
 
 # Event IDs you want to epoch on. Used to extract specific events
 # from annotations
@@ -97,6 +110,33 @@ event_id = {
     'object/1back': 22,
     'face/novel': 31,
     'face/1back': 32
+}
+
+# Metadata Queries for ERPs/ERDs
+erp_queries = {
+    'novel': "repeat==1 and resp!='j'",
+    'repeat': "repeat==2 and resp=='j'",
+    'scene': "category=='scenes' and repeat==1 and resp!='j'",
+    'object': "category=='objects' and repeat==1 and resp!='j'",
+    'face': "category=='faces' and repeat==1 and resp!='j'"
+}
+
+# Difference waves to make
+erp_contrasts = {
+    'repeat-novel': dict(conds=['novel', 'repeat'], weights=[-1, 1]),
+    'scene-object': dict(conds=['scene', 'object'], weights=[1, -1]),
+    'face-object': dict(conds=['object', 'face'], weights=[-1, 1]),
+    'scene-other': dict(conds=['scene', 'object', 'face'],
+                        weights=[1, -.5, -.5]),
+    'face-other': dict(conds=['scene', 'object', 'face'],
+                       weights=[-.5, -.5, 1])
+}
+
+# ERPs to Compare via mne.viz.plot_compare_evoked
+erps_to_plot = {
+    'repetition': ['novel', 'repeat'],
+    'image type': ['scene', 'object', 'face'],
+    'n170 and p200': ['scene-object', 'face-object']
 }
 
 # STEP 3: DEFINE THE SERVER AND DATA DIRECTORIES
