@@ -5,9 +5,10 @@ Description: This script handles initial data preprocessing through
 ICA estimation. The following is done:
 
 1) Subject information and directories defined
-2) Raw data loaded, events extracted and adjusted via photosensor
-3) Raw data and events resampled
-4) Raw data high pass filtered
+2) Raw data loaded
+3) Events adjusted with photosensor (optional)
+4) Raw data and events resampled and notch filter (notch is optional)
+5) Raw data high pass filtered at 1.0Hz (1.0 Hz transition bandwidth)
 5) Epochs created from Raw data
 6) Bad channels and epochs identified identified with:
     * MNE-FASTER (using threshold = 4)
@@ -24,20 +25,16 @@ os.chdir(os.path.split(__file__)[0])
 import numpy as np
 import pandas as pd
 
-import json
-
 from mne_bids import (BIDSPath, read_raw_bids)
 
 from mne import events_from_annotations
 from mne.preprocessing import ICA
 import mne
 
-from mne_faster import find_bad_epochs
-
-from autoreject import Ransac
+from mne_faster import (find_bad_epochs, find_bad_channels)
 
 from config import (bids_dir, deriv_dir, task, bv_montage,
-                    event_id, preprocess_opts)
+                    event_id, preprocess_opts, ransac)
 from functions import (get_sub_list, adjust_events_photosensor)
 
 # Ask for subject IDs to analyze
@@ -69,52 +66,40 @@ for sub in sub_list:
     events, event_id = events_from_annotations(raw, event_id=event_id)
 
     # Adjust events with photosensor
-    print('Adjusting marker onsets with Photosensor signal')
-    events, delays, n_adjusted = adjust_events_photosensor(
-        raw, events, tmin=-.02, tmax=.05, threshold=.80,
-        min_tdiff=.0085, return_diagnostics=True)
-    print(f'  {n_adjusted} events were shifted')
+    if preprocess_opts['adjust_events']:
+        print('Adjusting marker onsets with Photosensor signal')
+        events, delays, n_adjusted = adjust_events_photosensor(
+            raw, events, tmin=-.02, tmax=.05, threshold=.80,
+            min_tdiff=.0085, return_diagnostics=True)
+        print(f'  {n_adjusted} events were shifted')
 
     # Remove Photosensor from channels
-    raw.drop_channels('Photosensor')
+    if preprocess_opts['drop_photosensor']:
+        raw.drop_channels(preprocess_opts['photosensor_chan'])
 
     # STEP 3: RESAMPLE DATA AND EVENTS
     # Resample events and raw EEG data
     # This causes jitter, but it will be minimal
     raw, events = raw.resample(preprocess_opts['resample'], events=events)
 
+    # Notch filter
+    if preprocess_opts['notch_filter'] is not None:
+        raw.notch_filter(60)
+
     # Save EEG data with json
     eeg_file = deriv_sub_dir / \
         f'{sub}_task-{task}_ref-FCz_desc-resamp_raw.fif.gz'
     raw.save(eeg_file, overwrite=True)
-    json_info = {
-        'Description': 'EEG data with adjusted markers',
-        'resample_rate': raw.info['sfreq'],
-        'bads': raw.info['bads'],
-        'eeg_file': eeg_file.name
-    }
-    with open(str(eeg_file).replace('.fif.gz', '.json'), 'w') as outfile:
-        json.dump(json_info, outfile, indent=4)
 
     # Save events
     events_file = deriv_sub_dir / f'{sub}_task-{task}_desc-resamp_eve.txt'
     mne.write_events(events_file, events)
-    json_info = {
-        'Description': 'Resampled marker events',
-        'columns': ['onset', 'duration', 'code'],
-        'onset_units': 'samples',
-        'codes': event_id,
-        'resample_rate': raw.info['sfreq']
-    }
-    with open(str(eeg_file).replace('.txt', '.json'), 'w') as outfile:
-        json.dump(json_info, outfile, indent=4)
 
     # STEP 4: HIGH-PASS FILTER DATA
     # High-pass filter data from all channels
-    raw.filter(l_freq=preprocess_opts['l_freq'],
-               h_freq=preprocess_opts['h_freq'],
+    raw.filter(l_freq=preprocess_opts['ica_l_freq'],
+               h_freq=preprocess_opts['ica_h_freq'],
                skip_by_annotation=['boundary'])
-    raw.notch_filter(60)
 
     # STEP 5: EPOCH DATA
     # Load metadata
@@ -137,82 +122,22 @@ for sub in sub_list:
 
     # STEP 6: DETECT BAD CHANNELS
     # Detect bad channels using RANSAC
-    ransac = Ransac(min_corr=.7, n_jobs=4)
-    ransac.fit(epochs.copy().set_eeg_reference('average'))
-
-    # Update epochs and raw with bad channels
-    for x in ransac.bad_chs_:
-        epochs.info['bads'].append(x)
+    if preprocess_opts['bad_chan_method'] == 'faster':
+        bad_chans = find_bad_channels(epochs, max_iter=1, thres=4.0)
+    elif preprocess_opts['bad_chan_method'] == 'ransac':
+        ransac.fit(epochs.copy().drop_channels(epochs.info['bads']))
+        bad_chans = ransac.bad_chs_
+    for bc in bad_chans:
+        epochs.info['bads'].append(bc)
 
     # Plot PSD TODO ADD BLOCKING FUNCTION (MATPLOTLIB)
     epochs.plot_psd(xscale='linear', show=True, n_jobs=4)
 
-    # Any other channels to exclude?
-    other_bads = input(
-        'Other channels to exclude?\n'
-        'Separate multiple channels with commas.\n'
-        'Leave blank if none.\n'
-        'ENTER CHANNEL NAMES: ')
-    if other_bads:
-        for x in other_bads.split(','):
-            if x in epochs.info['ch_names']:
-                epochs.info['bads'].append(x)
-            else:
-                print(f'WARNING: Channel {x} is not present. '
-                      'Maybe you made a typo?!?!?')
-
-    # Save epochs
-    eeg_file = deriv_sub_dir / \
-        f'{sub}_task-{task}_ref-FCz_desc-orig_epo.fif.gz'
-    epochs.save(eeg_file, overwrite=True)
-
-    # Make a JSON
-    json_info = {
-        'Description': 'Epochs with bad channels flagged',
-        'reference': 'FCz',
-        'tmin': epochs.tmin,
-        'tmax': epochs.tmax,
-        'baseline': epochs.baseline,
-        'bad_channels': epochs.info['bads'],
-        'metadata_file': metadata_file.name,
-        'eeg_file': eeg_file.name
-    }
-    with open(str(eeg_file).replace('.fif.gz', '.json'), 'w') as outfile:
-        json.dump(json_info, outfile, indent=4)
-
-    # STEP 7: INTERPOLATE BAD CHANNELS AND AVERAGE REFERENCE
-    # Interpolate channels
-    epochs.interpolate_bads(verbose=True)
-
-    # Re-reference to average and recover FCz
-    epochs.add_reference_channels(preprocess_opts['reference_chan'])
-    epochs.set_eeg_reference(ref_channels='average', ch_type='eeg')
-
-    # Add the montage again for bad channel in epoch interpolation
-    epochs.set_montage(bv_montage)
-
-    # Save epochs
-    eeg_file = deriv_sub_dir / \
-        f'{sub}_task-{task}_ref-avg_desc-interpbads_epo.fif.gz'
-    epochs.save(eeg_file, overwrite=True)
-
-    # Make a JSON
-    json_info = {
-        'Description': 'Epochs with bads interpolated and re-referenced',
-        'reference': 'average',
-        'tmin': epochs.tmin,
-        'tmax': epochs.tmax,
-        'baseline': epochs.baseline,
-        'bad_channels': epochs.info['bads'],
-        'eeg_file': eeg_file.name
-    }
-    with open(str(eeg_file).replace('.fif.gz', '.json'), 'w') as outfile:
-        json.dump(json_info, outfile, indent=4)
-
-    # STEP 8: REJECT BAD EPOCHS FOR ICA
+    # STEP 7: REJECT BAD EPOCHS FOR ICA
     # Find bad epochs using FASTER and drop them
-    bad_epochs = find_bad_epochs(epochs, return_by_metric=True,
-                                 thres=preprocess_opts['faster_thresh'])
+    bad_epochs = find_bad_epochs(
+        epochs.copy().drop_channels(epochs.info['bads']),
+        return_by_metric=True, thres=preprocess_opts['faster_thresh'])
     for reason, drop_epochs in bad_epochs.items():
         epochs.drop(drop_epochs, reason=reason)
 
@@ -231,32 +156,36 @@ for sub in sub_list:
         picks=epochs.ch_names, scalings=dict(eeg=40e-6, eog=150e-6),
         block=True)
 
+    # Save epochs
+    eeg_file = deriv_sub_dir / \
+        f'{sub}_task-{task}_ref-FCz_desc-forica_epo.fif.gz'
+    epochs.save(eeg_file, overwrite=True)
+
+    # save bad channels
+    bad_ch_file = deriv_sub_dir / f"{sub}_task-{task}_badchans.tsv"
+    with open(bad_ch_file, 'w') as f:
+        for bi, bc in enumerate(epochs.info['bads']):
+            if bi == len(epochs.info['bads']):
+                f.write(bc)
+            else:
+                f.write(bc + '\t')
+
     # Find epochs and channels that were confirmed dropped
     dropped_epochs = []
     for i, epo in enumerate(epochs.drop_log):
         if len(epo) > 0:
             dropped_epochs.append(i)
 
-    # Save epochs
-    eeg_file = deriv_sub_dir / \
-        f'{sub}_task-{task}_ref-avg_desc-forica_epo.fif.gz'
-    epochs.save(eeg_file, overwrite=True)
+    # Save Dropped Epochs
+    bad_epo_file = deriv_sub_dir / \
+        f"{sub}_task-{task}_desc-forica_droppedepochs.tsv"
+    with open(bad_epo_file, 'w') as f:
+        for bi, be in enumerate(dropped_epochs):
+            f.write(str(be))
+            if bi != len(dropped_epochs):
+                f.write('\t')
 
-    # Make a JSON
-    json_info = {
-        'Description': 'Epochs for use with ICA',
-        'reference': 'average',
-        'tmin': epochs.tmin,
-        'tmax': epochs.tmax,
-        'baseline': epochs.baseline,
-        'bad_epochs': bad_epochs,
-        'dropped_epochs': dropped_epochs,
-        'eeg_file': eeg_file.name
-    }
-    with open(str(eeg_file).replace('.fif.gz', '.json'), 'w') as outfile:
-        json.dump(json_info, outfile, indent=4)
-
-    # STEP 9: ESTIMATE ICA
+    # STEP 8: ESTIMATE ICA
     # Estimate ICA
     ica = ICA(method='picard', max_iter=1000,
               random_state=int(sub_id),
@@ -265,21 +194,5 @@ for sub in sub_list:
     ica.fit(epochs)
 
     # Save ICA
-    ica_file = deriv_sub_dir / f'{sub}_task-{task}_ref-avg_ica.fif.gz'
+    ica_file = deriv_sub_dir / f'{sub}_task-{task}_ref-FCz_ica.fif.gz'
     ica.save(ica_file)
-
-    # Make a JSON
-    json_info = {
-        'Description': 'ICA components',
-        'reference': 'average',
-        'ica_method': {
-            'max_iter': 1000,
-            'method': 'picard',
-            'fit_params': dict(ortho=True, extended=True),
-            'random_state': int(sub_id)
-        },
-        'n_components': ica.get_components().shape[1],
-        'input_epochs_file': eeg_file.name
-    }
-    with open(str(ica_file).replace('.fif.gz', '.json'), 'w') as outfile:
-        json.dump(json_info, outfile, indent=4)

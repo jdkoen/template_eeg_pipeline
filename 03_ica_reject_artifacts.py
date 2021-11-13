@@ -21,8 +21,6 @@ ICA estimation. The following is done:
 import os
 os.chdir(os.path.split(__file__)[0])
 
-import json
-
 from mne import read_epochs
 from mne.preprocessing import read_ica
 
@@ -46,41 +44,39 @@ for sub in sub_list:
 
     # STEP 2: LOAD EPOCHS AND ICA OBJECTS
     # Load ICA Epochs
-    epochs = read_epochs(
-        deriv_sub_dir / f'{sub}_task-{task}_ref-avg_desc-forica_epo.fif.gz')
-    epochs.apply_baseline(preprocess_opts['baseline'])
+    eeg_file = deriv_sub_dir / \
+        f'{sub}_task-{task}_ref-FCz_desc-forica_epo.fif.gz'
+    epochs = read_epochs(eeg_file)
 
     # Load ICA data and json_info
-    ica_file = deriv_sub_dir / f'{sub}_task-{task}_ref-avg_ica.fif.gz'
+    ica_file = deriv_sub_dir / \
+        f"{sub}_task-{task}_ref-FCz_ica.fif.gz"
     ica = read_ica(ica_file)
     ica.exclude = []
-    json_file = deriv_sub_dir / f'{sub}_task-{task}_ref-avg_ica.json'
-    with open(json_file, 'r') as f:
-        json_info = json.load(f)
 
     # STEP 3: DETECT BAD ICS
     # Run find_bad_components
     bad_ics = find_bad_components(
         ica, epochs, thres=preprocess_opts['faster_thresh'],
-        return_by_metric=True, max_iter=2)
+        return_by_metric=True)
 
     # Gather all unique bad epochs
     for key, value in bad_ics.items():
         for v in value:
             if v not in ica.exclude:
                 ica.exclude.append(v)
-    ica.exclude.sort()
 
     # Plot ICA
     ica.plot_components(inst=epochs, reject=None)
-    ica.exclude.sort()
     ica.save(ica_file)
+    ica.exclude.sort()
     print(f'ICs Flagged for Removal: {ica.exclude}')
 
-    # Update ICA json sidecar file and resave file
-    json_info['FASTER_flagged_ics'] = bad_ics
-    json_info['flagged_components'] = [int(x) for x in ica.exclude]
-    json_info['proportion_components_flagged'] = \
-        len(ica.exclude) / len(ica.info['ch_names'])
-    with open(json_file, 'w') as f:
-        json.dump(json_info, f, indent=4)
+    # Save Dropped Epochs
+    bad_ica_file = deriv_sub_dir / \
+        f"{sub}_task-{task}_badics.tsv"
+    with open(bad_ica_file, 'w') as f:
+        for bi, bc in enumerate(ica.exclude):
+            f.write(str(bc))
+            if bi != len(ica.exclude):
+                f.write('\t')

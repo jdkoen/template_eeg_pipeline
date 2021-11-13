@@ -1,5 +1,5 @@
 """
-Script: 03_sof_preprocess_eeg.py
+Script: 04_eeg_remove_artifacts.py
 Creator: Joshua D. Koen
 Description: This script imports data from sourcedata to bids format for
 the SOF (scene, object, face) task and runs some preprocessing on the data.
@@ -10,15 +10,18 @@ import os
 os.chdir(os.path.split(__file__)[0])
 
 import numpy as np
-import json
+import pandas as pd
+import csv
 
-from mne import read_epochs
+from mne import read_events
+from mne.io import read_raw_fif
 from mne.preprocessing import read_ica
 import mne
 
 from mne_faster import (find_bad_epochs, find_bad_channels_in_epochs)
 
-from config import (deriv_dir, task, preprocess_opts)
+from config import (deriv_dir, task, preprocess_opts, event_id,
+                    bv_montage)
 
 from functions import get_sub_list
 
@@ -32,21 +35,60 @@ for sub in sub_list:
     # Define the Subject ID and paths
     sub_id = sub.replace('sub-', '')
     deriv_sub_dir = deriv_dir / sub
-    fig_sub_dir = deriv_sub_dir / 'figures'
-    print(f'Loading ICA task-{task} data for {sub}')
+    print(f'Loading task-{task} data for {sub}')
 
-    # STEP 2: LOAD EPOCHS AND ICA OBJECTS, CLEAN BAD ICS, AND BASELINE
+    # STEP 2: LOAD RESAMPLE RAW, BAD CHANNELS, EVENTS, METADATA, & ICA
+    # Load raw fif file
+    eeg_file = deriv_sub_dir / \
+        f'{sub}_task-{task}_ref-FCz_desc-resamp_raw.fif.gz'
+    raw = read_raw_fif(eeg_file, preload=True)
+
+    # Read in bad channels and add to raw
+    bad_chans = []
+    bad_ch_file = deriv_sub_dir / f"{sub}_task-{task}_badchans.tsv"
+    with open(bad_ch_file, 'r') as f:
+        for bcs in csv.reader(f, dialect="excel-tab"):
+            [bad_chans.append(x) for x in bcs if x]
+    raw.info['bads'] = bad_chans
+
+    # Read in events
+    events_file = deriv_sub_dir / f'{sub}_task-{task}_desc-resamp_eve.txt'
+    events = read_events(events_file)
+
+    # Load metadata file
+    metadata_file = deriv_sub_dir / f'{sub}_task-{task}_desc-orig_metadata.tsv'
+    metadata = pd.read_csv(metadata_file, sep='\t')
+
     # Load ICA
-    ica_file = deriv_sub_dir / f'{sub}_task-{task}_ref-avg_ica.fif.gz'
+    ica_file = deriv_sub_dir / f'{sub}_task-{task}_ref-FCz_ica.fif.gz'
     ica = read_ica(ica_file)
 
-    # Load Epochs with channels interpolated, and apply ICA in place
-    epoch_fif_file = deriv_sub_dir / \
-        f'{sub}_task-{task}_ref-avg_desc-interpbads_epo.fif.gz'
-    epochs = read_epochs(epoch_fif_file)
+    # STEP 3: FILTER RAW DATA
+    # High-pass filter data from all channels
+    raw.filter(l_freq=preprocess_opts['l_freq'],
+               h_freq=preprocess_opts['h_freq'],
+               skip_by_annotation=['boundary'])
+
+    # STEP 4: EPOCH DATA, REMOVE BAD ICs, INTERPOLATE BAD
+    # CHANNELSS, REREFERENCE, & BASELINE CORRECTION
+    # Make the epochs from extract event data
+    epochs = mne.Epochs(raw, events, event_id=event_id,
+                        tmin=preprocess_opts['tmin'],
+                        tmax=preprocess_opts['tmax'],
+                        baseline=None,
+                        metadata=metadata,
+                        reject=None,
+                        preload=True)
+
+    # Subtract bad ICs (operates on epochs in-place)
     ica.apply(epochs)
 
-    # Re-reference to average
+    # Interpolate bad channels
+    epochs.interpolate_bads(reset_bads=True, mode='accurate')
+
+    # Re-reference to average (recovering FCz)
+    epochs.add_reference_channels('FCz')
+    epochs.set_montage(bv_montage)
     epochs.set_eeg_reference(ref_channels='average')
 
     # Baseline correct
@@ -84,7 +126,7 @@ for sub in sub_list:
             ep.info['bads'] = b
             ep.interpolate_bads(verbose=False)
             epochs._data[i, :, :] = ep._data[0, :, :]
-    print('\tEpochs with bad n_chans > threshold: ',
+    print('Epochs with bad n_chans > threshold: ',
           bad_epochs['bad_chans_in_epo'])
     epochs.drop(bad_epochs['bad_chans_in_epo'],
                 reason='High Bad Chans in Epoch')
@@ -107,21 +149,11 @@ for sub in sub_list:
         if len(epo) > 0:
             dropped_epochs.append(i)
 
-    # Save epochs
-    eeg_file = deriv_sub_dir / \
-        f'{sub}_task-{task}_ref-avg_desc-forica_epo.fif.gz'
-    epochs.save(eeg_file, overwrite=True)
-
-    # Make a JSON
-    json_info = {
-        'Description': 'Epochs after artifact correction and rejection',
-        'reference': 'average',
-        'tmin': epochs.tmin,
-        'tmax': epochs.tmax,
-        'baseline': epochs.baseline,
-        'bad_epochs': bad_epochs,
-        'dropped_epochs': dropped_epochs,
-        'eeg_file': eeg_file.name
-    }
-    with open(str(eeg_file).replace('.fif.gz', '.json'), 'w') as outfile:
-        json.dump(json_info, outfile, indent=4)
+    # Save Dropped Epochs
+    bad_epo_file = deriv_sub_dir / \
+        f"{sub}_task-{task}_desc-cleaned_droppedepochs.tsv"
+    with open(bad_epo_file, 'w') as f:
+        for bi, be in enumerate(dropped_epochs):
+            f.write(str(be))
+            if bi != len(dropped_epochs):
+                f.write('\t')
