@@ -96,7 +96,7 @@ for sub in sub_list:
     chans_data = pd.read_csv(bids_sub_dir.fpath, sep='\t')
 
     # Add EEG Reference
-    chans_data['reference'] = preprocess_opts['reference_chan']
+    chans_data['reference'] = 'FCz'
 
     # Remove online reference from auxillary channels
     for chan in ['VEOG', 'HEOG', 'Photosensor']:
