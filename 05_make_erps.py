@@ -24,7 +24,7 @@ sub_list = get_sub_list(deriv_dir, allow_all=True)
 # Loop through subjects
 for sub in sub_list:
 
-    # STEP 1: SUBJECT INFORMATION DEFINITION ###
+    # STEP 1: SUBJECT INFORMATION DEFINITION
     # Define the Subject ID and paths
     sub_id = sub.replace('sub-', '')
     deriv_sub_dir = deriv_dir / sub
