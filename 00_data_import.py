@@ -53,16 +53,14 @@ for sub in sub_list:
     print(f'  BIDS Path: {bids_sub_dir.directory}')
     print(f'  Derivative Path: {deriv_sub_dir}')
 
+    # Ask for info to specify subject_info
+    age = int(input('Enter age: '))
+    sex = int(input('Enter sex/gender (0=unknown, 1=male, 2=female): '))
+    hand = int(input('Enter handedness (1=right, 2=left, 3=ambidextrous): '))
+
     # STEP 2: BIDS-FY EEG DATA
     # Define the source data file
     source_vhdr = source_sub_dir / f'{sub_id}_1back.vhdr'
-
-    # Anonymize Dictionary
-    seed(a=study_seed)
-    anonymize = {
-        'daysback': (365 * randrange(100, 110)) +
-                    (randrange(-120, 120))
-    }
 
     # Read in raw bv from source and anonymize
     raw = read_raw_brainvision(
@@ -72,14 +70,34 @@ for sub in sub_list:
     # Update line frequency to 60 Hz and indicate it is properly referenced
     raw.info['line_freq'] = 60.0
 
+    # Anonymize
+    seed(a=study_seed)
+    raw.anonymize(
+        daysback=(365 * randrange(100, 110)) + (randrange(-120, 120)))
+
+    # Update subject_info
+    bdate = raw.info['meas_date'].date()
+    bdate = bdate.replace(year=bdate.year-age)
+    subject_info = {
+        'id': int(bids_id),
+        'his_id': f'sub-{bids_id}',
+        'birthday': (bdate.year, bdate.month, bdate.day),
+        'sex': sex,
+        'hand': hand,
+        'last_name': 'mne_anonymize',
+        'first_name': 'mne_anonymize',
+        'middle_name': 'mne_anonymize',
+    }
+    raw.info['subject_info'] = subject_info
+
     # Extract Events and remove annotations
     events, event_id = events_from_annotations(raw)
 
     # Write BIDS Output
     if bids_sub_dir.directory.is_dir():
         shutil.rmtree(bids_sub_dir.directory)
-    write_raw_bids(
-        raw, bids_path=bids_sub_dir, anonymize=anonymize,
+    bids_sub_dir = write_raw_bids(
+        raw, bids_path=bids_sub_dir,
         overwrite=True, verbose=False)
 
     # UPDATE CHANNELS.TSV
