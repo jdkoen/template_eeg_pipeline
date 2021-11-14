@@ -80,6 +80,11 @@ for sub in sub_list:
                         reject=None,
                         preload=True)
 
+    # Save original eeg epochs
+    eeg_file = deriv_sub_dir / \
+        f'{sub}_task-{task}_ref-FCz_desc-orig_epo.fif.gz'
+    epochs.save(eeg_file, overwrite=True)
+
     # Subtract bad ICs (operates on epochs in-place)
     ica.apply(epochs)
 
