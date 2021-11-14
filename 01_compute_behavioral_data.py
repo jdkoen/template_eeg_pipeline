@@ -53,26 +53,28 @@ sub_list = get_sub_list(bids_dir, allow_all=True)
 # Loop through subjects
 for sub in sub_list:
 
-    # Get subject information
+    # STEP 1: SUBJECT INFORMATION DEFINITION
+    # Define sub_id and directories
     sub_id = sub.replace('sub-', '')
+    bids_sub_dir = bids_dir / sub
     deriv_sub_dir = deriv_dir / sub
     fig_sub_dir = deriv_sub_dir / 'figures'
     fig_sub_dir.mkdir(parents=True, exist_ok=True)
 
-    # Make figure
+    # Load the behavioral data file
+    beh_file = bids_sub_dir / 'beh' / f'{sub}_task-{task}_beh.tsv'
+    beh_data = pd.read_csv(beh_file, sep='\t')
+
+    # Variables use for grouping summary measures.
+    groups = ['category', 'repeat']
+
+    # Initialize Figure
     plt.close('all')
     fig = plt.figure()
     fig.set_size_inches([11, 7])
     fig.suptitle(sub, fontsize=18)
 
-    # Load the behavioral data file
-    beh_file = deriv_sub_dir / 'beh' / f'{sub}_task-{task}_beh.tsv'
-    beh_data = pd.read_csv(beh_file, sep='\t')
-
-    # Variables use for grouping summary measures.
-    groups = ['category', 'presentation']
-
-    # STEP 1: COMPUTE TRIAL COUNTS
+    # STEP 2: COMPUTE TRIAL COUNTS
     # Calculate trial counts in a new data frame
     counts = beh_data.groupby(groups)['correct'].value_counts().unstack(groups)
     counts.fillna('0', inplace=True)
@@ -98,7 +100,7 @@ for sub in sub_list:
     ax2 = plt.subplot(2, 2, 3)
     proportions.plot(kind='bar', ax=ax2)
     ax2.legend(loc='upper center', mode='expand', ncol=3,
-               bbox_to_anchor=(.7, 1, .7, .12),
+               bbox_to_anchor=(.7, 1.03, .8, .12),
                frameon=False)
     ax2.tick_params(axis='x', rotation=0)
     ax2.set_title('Accuracy', y=1.15, fontsize=18, fontweight='bold')
@@ -114,11 +116,11 @@ for sub in sub_list:
     # STEP 2: MEDIAN RT MEASURES
     # Compute RT measures
     ax3 = plt.subplot(2, 2, 4)
-    median_rts = beh_data.query('correct==1 and presentation==2')
+    median_rts = beh_data.query('correct==1 and repeat==2')
     median_rts = median_rts.groupby('category')['rt'].median().to_frame()
-    mean_rts = beh_data.query('correct==1 and presentation==2')
+    mean_rts = beh_data.query('correct==1 and repeat==2')
     mean_rts = mean_rts.groupby('category')['rt'].mean().to_frame()
-    sd_rts = beh_data.query('correct==1 and presentation==2')
+    sd_rts = beh_data.query('correct==1 and repeat==2')
     sd_rts = sd_rts.groupby('category')['rt'].std().to_frame()
     ax3.bar(np.array([1, 1.5, 2]),
             median_rts.pivot_table(columns='category',
@@ -148,7 +150,7 @@ for sub in sub_list:
     out_dict = {
         'id': sub,
         'age': ['young' if int(sub_id) < 200 else 'older'],
-        'set': [beh_data.iloc[0]['stim_list']]
+        'set': [beh_data.iloc[0]['stim_set']]
     }
 
     # Add in accuracy values
