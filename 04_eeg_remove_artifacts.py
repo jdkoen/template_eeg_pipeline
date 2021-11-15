@@ -11,11 +11,13 @@ os.chdir(os.path.split(__file__)[0])
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import csv
 
 from mne import read_events
 from mne.io import read_raw_fif
 from mne.preprocessing import read_ica
+from mne.viz import plot_compare_evokeds
 import mne
 
 from mne_faster import (find_bad_epochs, find_bad_channels_in_epochs)
@@ -85,8 +87,20 @@ for sub in sub_list:
         f'{sub}_task-{task}_ref-FCz_desc-orig_epo.fif.gz'
     epochs.save(eeg_file, overwrite=True)
 
-    # Subtract bad ICs (operates on epochs in-place)
+    # Make ERP over all trials with IC artifacts still there
+    erps_to_check = [epochs.average()]
+    erps_to_check[0].comment = 'Original'
+
+    # Subtract bad ICs (operates on epochs in-place) and add to erps_to_check
     ica.apply(epochs)
+
+    # Check IC artifact cleaning interactively
+    erps_to_check.append(epochs.average())
+    erps_to_check[-1].comment = 'Cleaned'
+    plot_compare_evokeds(
+        erps_to_check, picks='eeg', show=True, axes='topo', colors=['k', 'r'],
+        title='Signals before (black) and after (red) cleaning)')
+    plt.show()
 
     # Interpolate bad channels
     epochs.interpolate_bads(reset_bads=True, mode='accurate')
@@ -101,19 +115,16 @@ for sub in sub_list:
 
     # STEP 3: ARTIFACT REJECTION
     # Find bad epochs using FASTER
-    bad_epochs = find_bad_epochs(epochs, return_by_metric=True,
+    bad_epochs = find_bad_epochs(epochs, return_by_metric=False,
                                  thres=preprocess_opts['faster_thresh'])
-    for reason, drop_epochs in bad_epochs.items():
-        epochs.drop(drop_epochs, reason=reason)
+    epochs.drop(bad_epochs, reason='FASTER (Epochs)')
 
-    # Find VEOG at stim onset
+    # Find VEOG at stim onset and drop them
     veog_data = epochs.copy().crop(
         tmin=-.075, tmax=.075).get_data(picks=['VEOG'])
     veog_p2p = np.ptp(
         np.squeeze(veog_data), axis=1) > preprocess_opts['blink_thresh']
-    bad_epochs['blink_onset'] = list(np.where(veog_p2p)[0])
-    print('\tEpochs with blinks at onset: ', bad_epochs['blink_onset'])
-    epochs.drop(bad_epochs['blink_onset'], reason='Onset Blink')
+    epochs.drop(list(np.where(veog_p2p)[0]), reason='Onset Blink')
 
     # Find bad channels in each epoch
     # If # bad channels fewer than preprocess_opts['faster_bad_n_chans'],
@@ -121,20 +132,18 @@ for sub in sub_list:
     metrics = ['amplitude', 'deviation', 'variance', 'median_gradient']
     bad_chans_in_epo = find_bad_channels_in_epochs(
         epochs, thres=preprocess_opts['faster_thresh'], use_metrics=metrics)
-    bad_epochs['bad_chans_in_epo'] = []
+    bad_epochs_by_chan = []
     for i, b in enumerate(bad_chans_in_epo):
         n_bad_epoch = len(b)
         if n_bad_epoch > preprocess_opts['faster_bad_n_chans']:
-            bad_epochs['bad_chans_in_epo'].append(i)
+            bad_epochs_by_chan.append(i)
         elif n_bad_epoch > 0:
             ep = epochs[i]
             ep.info['bads'] = b
             ep.interpolate_bads(verbose=False)
             epochs._data[i, :, :] = ep._data[0, :, :]
-    print('Epochs with bad n_chans > threshold: ',
-          bad_epochs['bad_chans_in_epo'])
-    epochs.drop(bad_epochs['bad_chans_in_epo'],
-                reason='High Bad Chans in Epoch')
+    print('Epochs with bad n_chans > threshold: ', bad_epochs_by_chan)
+    epochs.drop(bad_epochs_by_chan, reason='FASTER (Chans)')
 
     # Inspect the remaining epochs
     epochs.plot(
@@ -162,3 +171,8 @@ for sub in sub_list:
             f.write(str(be))
             if bi != len(dropped_epochs):
                 f.write('\t')
+
+    # Save metadata
+    metadata_file = deriv_sub_dir / \
+        f'{sub}_task-{task}_desc-cleaned_metadata.tsv'
+    epochs.metadata.to_csv(metadata_file, sep='\t', index=False)

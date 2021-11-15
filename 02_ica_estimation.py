@@ -137,17 +137,15 @@ for sub in sub_list:
     # Find bad epochs using FASTER and drop them
     bad_epochs = find_bad_epochs(
         epochs.copy().drop_channels(epochs.info['bads']),
-        return_by_metric=True, thres=preprocess_opts['faster_thresh'])
-    for reason, drop_epochs in bad_epochs.items():
-        epochs.drop(drop_epochs, reason=reason)
+        return_by_metric=False, thres=preprocess_opts['faster_thresh'])
+    epochs.drop(bad_epochs, reason='FASTER')
 
     # Find VEOG at stim onset and drop them
     veog_data = epochs.copy().crop(
         tmin=-.075, tmax=.075).get_data(picks=['VEOG'])
     veog_p2p = np.ptp(
         np.squeeze(veog_data), axis=1) > preprocess_opts['blink_thresh']
-    bad_epochs['blink_onset'] = list(np.where(veog_p2p)[0])
-    epochs.drop(bad_epochs['blink_onset'], reason='Onset Blink')
+    epochs.drop(list(np.where(veog_p2p)[0]), reason='Onset Blink')
 
     # Inspect the remaining epochs
     epochs.plot(

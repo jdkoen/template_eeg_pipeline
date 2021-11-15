@@ -52,7 +52,6 @@ for sub in sub_list:
     ica_file = deriv_sub_dir / \
         f"{sub}_task-{task}_ref-FCz_ica.fif.gz"
     ica = read_ica(ica_file)
-    ica.exclude = []
 
     # STEP 3: DETECT BAD ICS
     # Run find_bad_components
