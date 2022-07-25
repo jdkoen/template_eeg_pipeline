@@ -68,7 +68,7 @@ This script makes an html report using the `Report` class from mne-python. This 
 
 The `functions` script contains utility functions used throughout the scripts, such as `get_sub_list` and `adjust_events_photosensor`. 
 
-### Notes
+## Notes
 
 This codebase is under development and may experience constant change. For this reason, it is import to use this as a template only when starting a new experiment. Do not update the 'version' of this code base for an ungoing experiment unless otherwise necessary
 
